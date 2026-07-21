@@ -1,29 +1,35 @@
 import os
 
 
-OLLAMA_URL = os.getenv(
-    "OLLAMA_URL",
+DEFAULT_OLLAMA_URL = (
     "http://localhost:11434/api/chat"
 )
 
-OLLAMA_MODEL = os.getenv(
-    "OLLAMA_MODEL",
-    "qwen3:8b"
-)
+DEFAULT_OLLAMA_MODEL = "qwen3:8b"
 
-COLLECTION_PATH = os.getenv(
-    "COLLECTION_PATH",
+DEFAULT_COLLECTION_PATH = (
     "collections/collection.json"
 )
 
-REPORT_PATH = os.getenv(
-    "REPORT_PATH",
+DEFAULT_ENVIRONMENT_PATH = (
+    "environments/local.json"
+)
+
+DEFAULT_REPORT_PATH = (
     "reports/results.json"
 )
 
-REQUEST_TIMEOUT = int(
-    os.getenv(
-        "REQUEST_TIMEOUT",
-        "30"
+DEFAULT_REQUEST_TIMEOUT = 30
+
+DEFAULT_LLM_TIMEOUT = 120
+
+
+def get_env(
+    key: str,
+    default: str
+) -> str:
+
+    return os.getenv(
+        key,
+        default
     )
-)

@@ -1,7 +1,7 @@
 import httpx
 
 from .config import (
-    REQUEST_TIMEOUT
+    DEFAULT_REQUEST_TIMEOUT
 )
 
 from .models import (
@@ -20,7 +20,10 @@ from .state import (
 
 async def execute_test(
     test_case: TestCase,
-    state: StateManager
+    state: StateManager,
+    proxy: str | None = None,
+    timeout: int = DEFAULT_REQUEST_TIMEOUT,
+    verify: bool = True
 ):
 
     request = test_case.request
@@ -45,13 +48,27 @@ async def execute_test(
         state
     )
 
+    client_kwargs = {
+
+        "timeout":
+            timeout,
+
+        "follow_redirects":
+            True,
+
+        "verify":
+            verify
+    }
+
+    if proxy:
+
+        client_kwargs[
+            "proxy"
+        ] = proxy
+
     async with httpx.AsyncClient(
 
-        timeout=
-            REQUEST_TIMEOUT,
-
-        follow_redirects=
-            True
+        **client_kwargs
 
     ) as client:
 
@@ -100,7 +117,7 @@ async def execute_test(
 
             if value is not None:
 
-                state.set(
+                state.set_dynamic(
 
                     extractor.name,
 
@@ -141,6 +158,9 @@ async def execute_test(
             "headers":
                 headers,
 
+            "params":
+                params,
+
             "body":
                 body
         },
@@ -156,9 +176,7 @@ async def execute_test(
                 ),
 
             "body":
-                response.text[
-                    :5000
-                ]
+                response.text[:5000]
         },
 
         "expected_status_codes":
@@ -167,8 +185,15 @@ async def execute_test(
         "extracted":
             extracted,
 
-        "state":
-            state.all(),
+        "state": {
+
+            "static":
+                state.static_values(),
+
+            "dynamic":
+                state.dynamic_values()
+
+        },
 
         "passed":
             passed

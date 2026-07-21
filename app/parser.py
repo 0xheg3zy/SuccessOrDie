@@ -3,7 +3,9 @@ import json
 from .models import APIRequest
 
 
-def load_collection(path: str):
+def load_json(
+    path: str
+):
 
     with open(
         path,
@@ -11,19 +13,49 @@ def load_collection(path: str):
         encoding="utf-8"
     ) as file:
 
-        return json.load(file)
+        return json.load(
+            file
+        )
 
 
-def extract_variables(collection):
+def load_collection(
+    path: str
+):
+
+    return load_json(
+        path
+    )
+
+
+def load_environment(
+    path: str | None
+):
+
+    if not path:
+
+        return {}
+
+    environment = load_json(
+        path
+    )
 
     variables = {}
 
-    for variable in collection.get(
-        "variable",
+    for variable in environment.get(
+        "values",
         []
     ):
 
-        key = variable.get("key")
+        if not variable.get(
+            "enabled",
+            True
+        ):
+
+            continue
+
+        key = variable.get(
+            "key"
+        )
 
         value = variable.get(
             "value"
@@ -32,6 +64,37 @@ def extract_variables(collection):
         if key:
 
             variables[key] = value
+
+    return variables
+
+
+def extract_collection_variables(
+    collection
+):
+
+    variables = {}
+
+    for variable in collection.get(
+        "variable",
+        []
+    ):
+
+        if not variable.get(
+            "disabled",
+            False
+        ):
+
+            key = variable.get(
+                "key"
+            )
+
+            value = variable.get(
+                "value"
+            )
+
+            if key:
+
+                variables[key] = value
 
     return variables
 
@@ -122,12 +185,56 @@ def extract_request_body(
 
                 continue
 
-            result[
-                item.get("key")
-            ] = item.get(
+            key = item.get(
+                "key"
+            )
+
+            value = item.get(
                 "value",
                 ""
             )
+
+            if key:
+
+                result[key] = value
+
+        return result
+
+    if mode == "formdata":
+
+        result = {}
+
+        for item in body.get(
+            "formdata",
+            []
+        ):
+
+            if item.get(
+                "disabled",
+                False
+            ):
+
+                continue
+
+            if item.get(
+                "type",
+                "text"
+            ) != "text":
+
+                continue
+
+            key = item.get(
+                "key"
+            )
+
+            value = item.get(
+                "value",
+                ""
+            )
+
+            if key:
+
+                result[key] = value
 
         return result
 
@@ -174,7 +281,6 @@ def extract_requests(
 
         for item in items:
 
-            # Folder
             if "item" in item:
 
                 walk_items(
@@ -183,7 +289,6 @@ def extract_requests(
 
                 continue
 
-            # Request
             if "request" not in item:
 
                 continue
@@ -202,7 +307,7 @@ def extract_requests(
                 method=request.get(
                     "method",
                     "GET"
-                ),
+                ).upper(),
 
                 url=extract_url(
                     request
@@ -211,6 +316,8 @@ def extract_requests(
                 headers=extract_request_headers(
                     request
                 ),
+
+                params={},
 
                 body=extract_request_body(
                     request

@@ -2,24 +2,32 @@ class StateManager:
 
     def __init__(
         self,
-        initial=None
+        static_variables=None
     ):
 
-        self._state = (
-            initial.copy()
-            if initial
+        self.static = (
+            static_variables.copy()
+            if static_variables
             else {}
         )
 
-    def set(
+        self.dynamic = {}
+
+    def set_static(
         self,
         key,
         value
     ):
 
-        self._state[
-            key
-        ] = value
+        self.static[key] = value
+
+    def set_dynamic(
+        self,
+        key,
+        value
+    ):
+
+        self.dynamic[key] = value
 
     def get(
         self,
@@ -27,28 +35,67 @@ class StateManager:
         default=None
     ):
 
-        return self._state.get(
-            key,
-            default
-        )
+        # Dynamic variables have priority
 
-    def all(self):
+        if key in self.dynamic:
 
-        return self._state.copy()
+            return self.dynamic[key]
+
+        if key in self.static:
+
+            return self.static[key]
+
+        return default
 
     def has(
         self,
         key
     ):
 
-        return key in self._state
+        return (
+
+            key in self.dynamic
+
+            or
+
+            key in self.static
+
+        )
+
+    def all(
+        self
+    ):
+
+        result = {}
+
+        result.update(
+            self.static
+        )
+
+        result.update(
+            self.dynamic
+        )
+
+        return result
+
+    def static_values(
+        self
+    ):
+
+        return self.static.copy()
+
+    def dynamic_values(
+        self
+    ):
+
+        return self.dynamic.copy()
 
     def __repr__(
         self
     ):
 
         return repr(
-            self._state
+            self.all()
         )
 
 
@@ -81,8 +128,12 @@ def extract_json_value(
 
             try:
 
+                index = int(
+                    key
+                )
+
                 current = current[
-                    int(key)
+                    index
                 ]
 
             except (

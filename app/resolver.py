@@ -10,10 +10,12 @@ def resolve_string(
     value,
     state
 ):
+
     if not isinstance(
         value,
         str
     ):
+
         return value
 
     def replace(
@@ -29,6 +31,8 @@ def resolve_string(
         )
 
         if result is None:
+
+            # Keep unresolved variable
 
             return match.group(
                 0

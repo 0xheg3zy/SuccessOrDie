@@ -3,8 +3,9 @@ import json
 import httpx
 
 from .config import (
-    OLLAMA_MODEL,
-    OLLAMA_URL
+    DEFAULT_LLM_TIMEOUT,
+    DEFAULT_OLLAMA_MODEL,
+    DEFAULT_OLLAMA_URL
 )
 
 from .models import (
@@ -16,43 +17,48 @@ from .models import (
 SYSTEM_PROMPT = """
 You are an expert API security tester.
 
-Your job is to analyze an API endpoint
-and generate a structured API testing plan.
+Your job is to analyze API endpoints
+and generate structured API testing plans.
 
 Focus on:
 
-- Functional testing
-- Missing parameters
-- Invalid parameters
-- Boundary testing
-- Authentication
-- Authorization
-- BOLA / IDOR
-- Rate limiting
-- Information disclosure
-- HTTP method validation
+1. Functional testing
+2. Missing parameters
+3. Invalid parameters
+4. Boundary testing
+5. Authentication
+6. Authorization
+7. BOLA / IDOR
+8. Rate limiting
+9. Information disclosure
+10. HTTP method validation
 
-Important rules:
+Rules:
 
-1. Return ONLY valid JSON.
-2. Do not return markdown.
-3. Do not invent authentication tokens.
-4. Use the original endpoint URL.
-5. Keep tests practical.
-6. Every test must contain expected_status_codes.
-7. Use extractors when a successful response
-   contains useful values such as:
-   token
-   access_token
-   id
-   user_id
-   order_id
+- Return ONLY valid JSON.
+- Do not return markdown.
+- Do not invent tokens.
+- Use the supplied endpoint.
+- Keep tests practical.
+- Every test must have expected_status_codes.
+- Use extractors when a successful response
+  contains useful runtime values.
 
-Expected JSON format:
+Useful runtime values include:
+
+- token
+- access_token
+- refresh_token
+- id
+- user_id
+- order_id
+- session_id
+
+Expected JSON:
 
 {
   "endpoint": "string",
-  "method": "string",
+  "method": "GET",
   "tests": [
     {
       "name": "string",
@@ -79,7 +85,9 @@ Expected JSON format:
 
 
 async def generate_test_plan(
-    api_request: APIRequest
+    api_request: APIRequest,
+    model: str = DEFAULT_OLLAMA_MODEL,
+    ollama_url: str = DEFAULT_OLLAMA_URL
 ):
 
     prompt = f"""
@@ -94,12 +102,11 @@ Endpoint:
 
 Generate a practical API test plan.
 
-If the endpoint is a login endpoint,
-generate a valid authentication test
-and extract a token if the response
-contains one.
+If the endpoint is an authentication
+endpoint and the response contains a
+token, add an extractor.
 
-If the endpoint contains an object ID,
+If the endpoint contains object IDs,
 consider authorization testing.
 
 Return ONLY JSON.
@@ -108,7 +115,7 @@ Return ONLY JSON.
     payload = {
 
         "model":
-            OLLAMA_MODEL,
+            model,
 
         "messages": [
 
@@ -138,12 +145,15 @@ Return ONLY JSON.
     }
 
     async with httpx.AsyncClient(
-        timeout=120
+
+        timeout=
+            DEFAULT_LLM_TIMEOUT
+
     ) as client:
 
         response = await client.post(
 
-            OLLAMA_URL,
+            ollama_url,
 
             json=payload
         )

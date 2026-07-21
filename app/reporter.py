@@ -13,8 +13,11 @@ def save_report(
     )
 
     output.parent.mkdir(
+
         parents=True,
+
         exist_ok=True
+
     )
 
     with open(
@@ -38,6 +41,7 @@ def save_report(
             ensure_ascii=False,
 
             default=str
+
         )
 
 
@@ -62,7 +66,11 @@ def print_summary(
 
     )
 
-    failed = total - passed
+    failed = (
+        total
+        -
+        passed
+    )
 
     print(
         "\n========== SUMMARY =========="
