@@ -12,13 +12,6 @@ from .models import (
     APIRequest,
     TestPlan
 )
-if proxy_copy:
-    proxies = {
-        "http": proxy_copy,
-        "https": proxy_copy
-    }
-else:
-    proxies = None
 
 SYSTEM_PROMPT = """
 You are an expert API security tester.
@@ -103,6 +96,16 @@ def generate_test_plan(
     verify: bool = True
 ):
 
+    if proxy:
+        proxies = {
+            "http":
+                proxy,
+            "https":
+                proxy
+        }
+    else:
+        proxies = None
+
     request_data = (
         api_request.model_dump()
     )
@@ -186,7 +189,7 @@ Return ONLY valid JSON.
 
             timeout=timeout,
             verify=verify,
-            proxies=proxy
+            proxies=proxies
 
         )
 
