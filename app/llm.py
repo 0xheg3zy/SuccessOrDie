@@ -1,3 +1,4 @@
+from enum import verify
 import json
 
 import requests
@@ -92,7 +93,9 @@ def generate_test_plan(
     api_request: APIRequest,
     model: str = DEFAULT_OLLAMA_MODEL,
     ollama_url: str = DEFAULT_OLLAMA_URL,
-    timeout: int = DEFAULT_LLM_TIMEOUT
+    timeout: int = DEFAULT_LLM_TIMEOUT,
+    proxy: str | None = None,
+    verify: bool = True
 ):
 
     request_data = (
@@ -176,7 +179,9 @@ Return ONLY valid JSON.
 
             json=payload,
 
-            timeout=timeout
+            timeout=timeout,
+            verify=verify,
+            proxies=proxy
 
         )
 
