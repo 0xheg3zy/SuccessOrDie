@@ -1,8 +1,5 @@
 import json
 
-import requests
-import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from .config import (
     DEFAULT_LLM_TIMEOUT,
     DEFAULT_OLLAMA_MODEL,
@@ -46,48 +43,17 @@ Variables can have two sources:
 2. Dynamic variables extracted from previous
    API responses
 
-The supplied context contains:
-
-- static_variables
-- currently_available_dynamic_variables
-- endpoint dependencies
-
 Rules:
 
 - Never invent a dynamic variable value.
 - Never replace a dynamic variable with a fake value.
 - If a variable already exists in the available state,
   preserve it.
-- If a variable is required by this endpoint but is not
-  currently available, keep the variable placeholder.
-- The executor will resolve variables before execution.
-- If the endpoint can create a value required by later
-  endpoints, create an extractor.
-
-Example:
-
-Login response:
-
-{
-  "data": {
-    "access_token": "..."
-  }
-}
-
-Create:
-
-{
-  "name": "access_token",
-  "json_path": "data.access_token"
-}
-
-Later request:
-
-Authorization: Bearer {{access_token}}
-
-The variable must remain exactly:
-
-{{access_token}}
+- If a variable is required but not available,
+  keep the placeholder.
+- The executor resolves variables before execution.
+- If the endpoint creates a value required later,
+  create an extractor.
 
 ==================================================
 TEST DESIGN
@@ -135,51 +101,6 @@ Only generate tests relevant to the endpoint.
 Avoid duplicate or meaningless tests.
 
 ==================================================
-EDGE CASES
-==================================================
-
-Analyze every input field.
-
-For strings:
-
-- empty
-- whitespace
-- minimum
-- maximum
-- below minimum
-- above maximum
-- very long
-- Unicode
-- special characters
-
-For numbers:
-
-- zero
-- negative
-- minimum
-- maximum
-- decimal
-- huge number
-- numeric string
-- non-numeric
-
-For arrays:
-
-- empty
-- one item
-- many items
-- duplicate items
-- invalid item types
-- null items
-
-For objects:
-
-- empty object
-- missing fields
-- unexpected fields
-- nested unexpected fields
-
-==================================================
 EXPECTED BEHAVIOR
 ==================================================
 
@@ -189,36 +110,7 @@ Every test MUST contain:
 - expected_behavior
 - test_rationale
 
-Expected behavior describes what SHOULD happen.
-
 Do NOT invent actual results.
-
-The executor will add:
-
-- actual_status_code
-- actual_response
-- passed
-- result_reason
-
-==================================================
-TEST RESULT SEMANTICS
-==================================================
-
-A test is successful when the actual behavior matches
-the expected behavior.
-
-Do not assume that HTTP 2xx always means success.
-
-For example:
-
-A "missing required field" test returning 400
-may be a PASS.
-
-A "successful registration" test returning 400
-may be a FAIL.
-
-An authorization test returning 200 with another user's
-data is a security FAIL.
 
 ==================================================
 OUTPUT
@@ -283,24 +175,11 @@ Determine:
 - Security impact
 - Severity
 
-Important:
+Do not mark a test as failed only because the
+status code differs.
 
-Do not mark a test as failed only because the status
-code differs.
-
-Determine whether the API behavior actually violates
-the expected behavior.
-
-Examples:
-
-Missing required field + HTTP 400:
-PASS if rejection was expected.
-
-Successful registration + HTTP 400:
-FAIL if the API should accept valid input.
-
-Unauthorized access + HTTP 200 + sensitive data:
-FAIL with security impact.
+Determine whether actual API behavior violates
+expected behavior.
 
 Return ONLY valid JSON:
 
@@ -315,12 +194,11 @@ Return ONLY valid JSON:
 
 
 def ollama_chat(
+    client,
     messages,
     model,
     ollama_url,
-    timeout,
-    proxies=None,
-    verify=True
+    timeout
 ):
 
     payload = {
@@ -339,15 +217,35 @@ def ollama_chat(
 
     }
 
-    response = requests.post(
+    print(
+
+        "[LLM] URL      : "
+        f"{ollama_url}"
+
+    )
+
+    print(
+
+        "[LLM] Model    : "
+        f"{model}"
+
+    )
+
+    print(
+
+        "[LLM] Proxy    : "
+        f"{client.proxy or 'Disabled'}"
+
+    )
+
+    response = client.post(
 
         ollama_url,
 
         json=payload,
 
-        timeout=timeout,
-        proxies=proxies,
-        verify=verify
+        timeout=
+            timeout
 
     )
 
@@ -375,40 +273,15 @@ def ollama_chat(
 
 
 def generate_test_plan(
+    client,
     api_request: APIRequest,
     static_variables=None,
     dynamic_variables=None,
     dependencies=None,
     model=DEFAULT_OLLAMA_MODEL,
     ollama_url=DEFAULT_OLLAMA_URL,
-    timeout=DEFAULT_LLM_TIMEOUT,
-    proxy=None,
-    verify=True
+    timeout=DEFAULT_LLM_TIMEOUT
 ):
-
-    if proxy:
-
-        proxies = {
-
-            "http":
-                proxy,
-
-            "https":
-                proxy
-
-        }
-
-    else:
-
-        proxies = None
-
-    if verify:
-
-        verify = True
-
-    else:
-
-        verify = False
 
     context = {
 
@@ -450,11 +323,9 @@ Important:
 - Create extractors for useful response values.
 """
 
-    print(
-        "[LLM] Generating test plan..."
-    )
-
     content = ollama_chat(
+
+        client,
 
         messages=[
 
@@ -483,13 +354,7 @@ Important:
             ollama_url,
 
         timeout=
-            timeout,
-
-        proxies=
-            proxies,
-
-        verify=
-            verify
+            timeout
 
     )
 
@@ -499,39 +364,14 @@ Important:
 
 
 def analyze_test_result(
+    client,
     test_case,
     actual_status_code,
     actual_response,
     model=DEFAULT_OLLAMA_MODEL,
     ollama_url=DEFAULT_OLLAMA_URL,
-    timeout=DEFAULT_LLM_TIMEOUT,
-    proxies=None,
-    verify=True
+    timeout=DEFAULT_LLM_TIMEOUT
 ):
-
-    if proxy:
-
-        proxies = {
-
-            "http":
-                proxy,
-
-            "https":
-                proxy
-
-        }
-
-    else:
-
-        proxies = None
-
-    if verify:
-
-        verify = True
-
-    else:
-
-        verify = False
 
     context = {
 
@@ -579,6 +419,8 @@ Return ONLY valid JSON.
 
     content = ollama_chat(
 
+        client,
+
         messages=[
 
             {
@@ -606,13 +448,7 @@ Return ONLY valid JSON.
             ollama_url,
 
         timeout=
-            timeout,
-
-        proxies=
-            proxies,
-
-        verify=
-            verify
+            timeout
 
     )
 

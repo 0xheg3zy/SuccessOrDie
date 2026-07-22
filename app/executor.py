@@ -1,6 +1,3 @@
-import requests
-import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from .resolver import (
     resolve_request,
     unresolved_variables
@@ -13,11 +10,10 @@ from .state import (
 
 
 def execute_test(
+    client,
     test_case,
     state: StateManager,
-    proxy=None,
-    timeout=30,
-    verify=True
+    timeout=30
 ):
 
     resolved_request = resolve_request(
@@ -104,20 +100,6 @@ def execute_test(
 
         }
 
-    proxies = None
-
-    if proxy:
-
-        proxies = {
-
-            "http":
-                proxy,
-
-            "https":
-                proxy
-
-        }
-
     print(
         "\n[HTTP] Sending request"
     )
@@ -133,13 +115,13 @@ def execute_test(
     print(
 
         "[HTTP] Proxy: "
-        f"{proxy or 'None'}"
+        f"{client.proxy or 'Disabled'}"
 
     )
 
     try:
 
-        response = requests.request(
+        response = client.request(
 
             method=
                 resolved_request[
@@ -166,18 +148,12 @@ def execute_test(
                     "body"
                 ],
 
-            proxies=
-                proxies,
-
-            verify=
-                verify,
-
             timeout=
                 timeout
 
         )
 
-    except requests.RequestException as error:
+    except Exception as error:
 
         return {
 

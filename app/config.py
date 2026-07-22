@@ -6,6 +6,11 @@ DEFAULT_OLLAMA_URL = os.getenv(
     "http://localhost:11434/api/chat"
 )
 
+DEFAULT_OLLAMA_BASE_URL = os.getenv(
+    "OLLAMA_BASE_URL",
+    "http://localhost:11434"
+)
+
 DEFAULT_OLLAMA_MODEL = os.getenv(
     "OLLAMA_MODEL",
     "qwen3:8b"
@@ -26,3 +31,5 @@ DEFAULT_REPORT_PATH = (
 DEFAULT_REQUEST_TIMEOUT = 30
 
 DEFAULT_LLM_TIMEOUT = 300
+
+DEFAULT_MODEL_STATUS_TIMEOUT = 30

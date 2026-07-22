@@ -4,6 +4,8 @@ from .config import (
     DEFAULT_COLLECTION_PATH,
     DEFAULT_ENVIRONMENT_PATH,
     DEFAULT_LLM_TIMEOUT,
+    DEFAULT_MODEL_STATUS_TIMEOUT,
+    DEFAULT_OLLAMA_BASE_URL,
     DEFAULT_OLLAMA_MODEL,
     DEFAULT_OLLAMA_URL,
     DEFAULT_REPORT_PATH,
@@ -24,11 +26,19 @@ from .llm import (
     generate_test_plan
 )
 
+from .model_monitor import (
+    print_model_status
+)
+
 from .parser import (
     extract_collection_variables,
     extract_requests,
     load_collection,
     load_environment
+)
+
+from .proxy import (
+    ProxySession
 )
 
 from .reporter import (
@@ -102,6 +112,15 @@ def parse_args():
 
     parser.add_argument(
 
+        "--ollama-base-url",
+
+        default=
+            DEFAULT_OLLAMA_BASE_URL
+
+    )
+
+    parser.add_argument(
+
         "--model",
 
         default=
@@ -128,6 +147,17 @@ def parse_args():
 
         default=
             DEFAULT_LLM_TIMEOUT
+
+    )
+
+    parser.add_argument(
+
+        "--model-status-timeout",
+
+        type=int,
+
+        default=
+            DEFAULT_MODEL_STATUS_TIMEOUT
 
     )
 
@@ -164,8 +194,10 @@ def normalize_proxy(
         return proxy
 
     return (
+
         "http://"
         + proxy
+
     )
 
 
@@ -205,7 +237,7 @@ def main():
 
     print(
 
-        "[+] Proxy: "
+        "[+] Proxy enabled: "
         f"{proxy or 'Disabled'}"
 
     )
@@ -224,171 +256,145 @@ def main():
 
     )
 
-    collection = load_collection(
+    print(
 
-        args.collection
+        "[+] Ollama URL: "
+        f"{args.ollama_url}"
 
     )
 
-    collection_variables = (
+    print(
 
-        extract_collection_variables(
+        "[+] LLM traffic proxy: "
+        f"{proxy or 'Disabled'}"
+
+    )
+
+    client = ProxySession(
+
+        proxy=
+            proxy,
+
+        verify=
+            verify_tls
+
+    )
+
+    try:
+
+        print(
+
+            "\n[+] Checking Ollama "
+            "model status..."
+
+        )
+
+        print_model_status(
+
+            client,
+
+            base_url=
+                args.ollama_base_url,
+
+            model=
+                args.model,
+
+            timeout=
+                args.model_status_timeout
+
+        )
+
+        print(
+            "\n[+] Loading collection..."
+        )
+
+        collection = load_collection(
+
+            args.collection
+
+        )
+
+        collection_variables = (
+
+            extract_collection_variables(
+
+                collection
+
+            )
+
+        )
+
+        environment_variables = (
+
+            load_environment(
+
+                args.environment
+
+            )
+
+        )
+
+        static_variables = {}
+
+        static_variables.update(
+
+            collection_variables
+
+        )
+
+        static_variables.update(
+
+            environment_variables
+
+        )
+
+        state = StateManager(
+
+            static_variables
+
+        )
+
+        print(
+
+            "[+] Static variables: "
+            f"{len(static_variables)}"
+
+        )
+
+        requests_list = extract_requests(
 
             collection
 
         )
 
-    )
-
-    environment_variables = (
-
-        load_environment(
-
-            args.environment
-
-        )
-
-    )
-
-    static_variables = {}
-
-    static_variables.update(
-
-        collection_variables
-
-    )
-
-    static_variables.update(
-
-        environment_variables
-
-    )
-
-    state = StateManager(
-
-        static_variables
-
-    )
-
-    print(
-
-        "[+] Static variables: "
-        f"{len(static_variables)}"
-
-    )
-
-    requests_list = extract_requests(
-
-        collection
-
-    )
-
-    print(
-
-        "[+] API requests: "
-        f"{len(requests_list)}"
-
-    )
-
-    dependency_graph = (
-
-        build_dependency_graph(
-
-            requests_list
-
-        )
-
-    )
-
-    print_dependency_graph(
-
-        dependency_graph
-
-    )
-
-    results = []
-
-    for index, api_request in enumerate(
-
-        requests_list,
-
-        start=1
-
-    ):
-
         print(
 
-            "\n"
-            f"[{index}/{len(requests_list)}] "
-            f"{api_request.method} "
-            f"{api_request.url}"
+            "[+] API requests: "
+            f"{len(requests_list)}"
 
         )
 
-        dependencies = (
+        dependency_graph = (
 
-            dependency_graph.get(
+            build_dependency_graph(
 
-                api_request.name,
-
-                []
+                requests_list
 
             )
 
         )
 
-        try:
+        print_dependency_graph(
 
-            test_plan = (
-
-                generate_test_plan(
-
-                    api_request,
-
-                    static_variables=
-                        state.static_values(),
-
-                    dynamic_variables=
-                        state.dynamic_values(),
-
-                    dependencies=
-                        dependencies,
-
-                    model=
-                        args.model,
-
-                    ollama_url=
-                        args.ollama_url,
-
-                    timeout=
-                        args.llm_timeout
-
-                )
-
-            )
-
-        except Exception as error:
-
-            print(
-
-                "[!] LLM error: "
-                f"{error}"
-
-            )
-
-            continue
-
-        print(
-
-            "[+] Generated "
-            f"{len(test_plan.tests)} "
-            "tests"
+            dependency_graph
 
         )
 
-        for test_index, test_case in enumerate(
+        results = []
 
-            test_plan.tests,
+        for index, api_request in enumerate(
+
+            requests_list,
 
             start=1
 
@@ -397,63 +403,42 @@ def main():
             print(
 
                 "\n"
-                f"    [{test_index}/"
-                f"{len(test_plan.tests)}] "
-                f"{test_case.name}"
+                f"[{index}/{len(requests_list)}] "
+                f"{api_request.method} "
+                f"{api_request.url}"
 
             )
 
-            result = execute_test(
+            dependencies = (
 
-                test_case,
+                dependency_graph.get(
 
-                state,
+                    api_request.name,
 
-                proxy=
-                    proxy,
-
-                timeout=
-                    args.timeout,
-
-                verify=
-                    verify_tls
-
-            )
-
-            if "actual" not in result:
-
-                results.append(
-
-                    result
+                    []
 
                 )
 
-                continue
-
-            print(
-
-                "    [AI] Analyzing result..."
             )
 
             try:
 
-                analysis = (
+                test_plan = (
 
-                    analyze_test_result(
+                    generate_test_plan(
 
-                        test_case,
+                        client,
 
-                        result[
-                            "actual"
-                        ].get(
-                            "status_code"
-                        ),
+                        api_request,
 
-                        result[
-                            "actual"
-                        ].get(
-                            "response"
-                        ),
+                        static_variables=
+                            state.static_values(),
+
+                        dynamic_variables=
+                            state.dynamic_values(),
+
+                        dependencies=
+                            dependencies,
 
                         model=
                             args.model,
@@ -462,66 +447,186 @@ def main():
                             args.ollama_url,
 
                         timeout=
-                            args.llm_timeout,
-
-                        proxies=
-                            proxy,
-
-                        verify=
-                            verify_tls
+                            args.llm_timeout
 
                     )
 
                 )
 
-                result.update(
-
-                    analysis
-
-                )
-
             except Exception as error:
 
-                result[
-                    "passed"
-                ] = False
+                print(
 
-                result[
-                    "reason"
-                ] = (
-
-                    "AI result analysis failed: "
-
+                    "[!] LLM error: "
                     f"{error}"
 
                 )
 
-            results.append(
+                continue
 
-                result
+            print(
+
+                "[+] Generated "
+                f"{len(test_plan.tests)} "
+                "tests"
 
             )
 
-    save_report(
+            for test_index, test_case in enumerate(
 
-        results,
+                test_plan.tests,
 
-        args.report
+                start=1
 
-    )
+            ):
 
-    print_summary(
+                print(
 
-        results
+                    "\n"
+                    f"    [{test_index}/"
+                    f"{len(test_plan.tests)}] "
+                    f"{test_case.name}"
 
-    )
+                )
 
-    print(
+                result = execute_test(
 
-        "[+] Report saved: "
-        f"{args.report}"
+                    client,
 
-    )
+                    test_case,
+
+                    state,
+
+                    timeout=
+                        args.timeout
+
+                )
+
+                if "actual" not in result:
+
+                    results.append(
+
+                        result
+
+                    )
+
+                    continue
+
+                print(
+
+                    "    [AI] "
+                    "Analyzing result..."
+                )
+
+                try:
+
+                    analysis = (
+
+                        analyze_test_result(
+
+                            client,
+
+                            test_case,
+
+                            result[
+                                "actual"
+                            ].get(
+                                "status_code"
+                            ),
+
+                            result[
+                                "actual"
+                            ].get(
+                                "response"
+                            ),
+
+                            model=
+                                args.model,
+
+                            ollama_url=
+                                args.ollama_url,
+
+                            timeout=
+                                args.llm_timeout
+
+                        )
+
+                    )
+
+                    result.update(
+
+                        analysis
+
+                    )
+
+                    status = (
+
+                        "PASS"
+
+                        if result.get(
+                            "passed"
+                        )
+
+                        else
+
+                        "FAIL"
+
+                    )
+
+                    print(
+
+                        f"    [{status}] "
+                        f"{result.get('reason', '')}"
+
+                    )
+
+                except Exception as error:
+
+                    result[
+                        "passed"
+                    ] = False
+
+                    result[
+                        "reason"
+                    ] = (
+
+                        "AI result analysis "
+                        "failed: "
+
+                        f"{error}"
+
+                    )
+
+                results.append(
+
+                    result
+
+                )
+
+        save_report(
+
+            results,
+
+            args.report
+
+        )
+
+        print_summary(
+
+            results
+
+        )
+
+        print(
+
+            "[+] Report saved: "
+            f"{args.report}"
+
+        )
+
+    finally:
+
+        client.close()
 
 
 if __name__ == "__main__":
