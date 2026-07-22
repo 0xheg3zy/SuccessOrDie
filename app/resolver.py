@@ -18,9 +18,7 @@ def resolve_string(
 
         return value
 
-    def replace(
-        match
-    ):
+    def replace(match):
 
         key = match.group(
             1
@@ -32,15 +30,11 @@ def resolve_string(
 
         if result is None:
 
-            # Keep unresolved variable
-
             return match.group(
                 0
             )
 
-        return str(
-            result
-        )
+        return str(result)
 
     return VARIABLE_PATTERN.sub(
         replace,
@@ -70,11 +64,10 @@ def resolve_recursive(
 
         return {
 
-            key:
-                resolve_recursive(
-                    val,
-                    state
-                )
+            key: resolve_recursive(
+                val,
+                state
+            )
 
             for key, val
             in value.items()
@@ -93,8 +86,7 @@ def resolve_recursive(
                 state
             )
 
-            for item
-            in value
+            for item in value
 
         ]
 

@@ -1,6 +1,6 @@
 import json
 
-import httpx
+import requests
 
 from .config import (
     DEFAULT_LLM_TIMEOUT,
@@ -17,8 +17,8 @@ from .models import (
 SYSTEM_PROMPT = """
 You are an expert API security tester.
 
-Your job is to analyze API endpoints
-and generate structured API testing plans.
+Analyze the supplied API endpoint and
+generate a practical API security test plan.
 
 Focus on:
 
@@ -41,10 +41,14 @@ Rules:
 - Use the supplied endpoint.
 - Keep tests practical.
 - Every test must have expected_status_codes.
-- Use extractors when a successful response
-  contains useful runtime values.
+- Preserve the original request structure.
+- Do not remove required headers unless the test
+  specifically targets missing headers.
 
-Useful runtime values include:
+If a successful response contains useful
+runtime values, create extractors.
+
+Useful runtime values:
 
 - token
 - access_token
@@ -58,14 +62,14 @@ Expected JSON:
 
 {
   "endpoint": "string",
-  "method": "GET",
+  "method": "string",
   "tests": [
     {
       "name": "string",
       "category": "string",
       "description": "string",
       "request": {
-        "method": "GET",
+        "method": "string",
         "url": "string",
         "headers": {},
         "params": {},
@@ -84,32 +88,38 @@ Expected JSON:
 """
 
 
-async def generate_test_plan(
+def generate_test_plan(
     api_request: APIRequest,
     model: str = DEFAULT_OLLAMA_MODEL,
-    ollama_url: str = DEFAULT_OLLAMA_URL
+    ollama_url: str = DEFAULT_OLLAMA_URL,
+    timeout: int = DEFAULT_LLM_TIMEOUT
 ):
+
+    request_data = (
+        api_request.model_dump()
+    )
 
     prompt = f"""
 Analyze this API endpoint.
 
-Endpoint:
+Original API request:
 
 {json.dumps(
-    api_request.model_dump(),
-    indent=2
+    request_data,
+    indent=2,
+    ensure_ascii=False
 )}
 
-Generate a practical API test plan.
+Generate a practical API security
+test plan based on this request.
 
-If the endpoint is an authentication
-endpoint and the response contains a
-token, add an extractor.
+Preserve the original request structure.
 
-If the endpoint contains object IDs,
-consider authorization testing.
+If this is an authentication endpoint
+and the response may contain a token,
+add an extractor.
 
-Return ONLY JSON.
+Return ONLY valid JSON.
 """
 
     payload = {
@@ -144,30 +154,116 @@ Return ONLY JSON.
             "json"
     }
 
-    async with httpx.AsyncClient(
+    print(
+        "[LLM] URL: "
+        f"{ollama_url}"
+    )
 
-        timeout=
-            DEFAULT_LLM_TIMEOUT
+    print(
+        "[LLM] Model: "
+        f"{model}"
+    )
 
-    ) as client:
+    print(
+        "[LLM] Sending request..."
+    )
 
-        response = await client.post(
+    try:
+
+        response = requests.post(
 
             ollama_url,
 
-            json=payload
+            json=payload,
+
+            timeout=timeout
+
+        )
+
+        print(
+            "[LLM] HTTP status: "
+            f"{response.status_code}"
         )
 
         response.raise_for_status()
 
+    except requests.Timeout:
+
+        raise RuntimeError(
+
+            "Ollama request timed out "
+            f"after {timeout} seconds"
+
+        )
+
+    except requests.RequestException as error:
+
+        raise RuntimeError(
+
+            f"Ollama request failed: "
+            f"{error}"
+
+        )
+
+    try:
+
         data = response.json()
+
+    except ValueError:
+
+        raise RuntimeError(
+
+            "Ollama returned invalid JSON"
+
+        )
+
+    if "message" not in data:
+
+        raise RuntimeError(
+
+            "Ollama response does not "
+            "contain 'message'"
+
+        )
 
     content = data[
         "message"
-    ][
-        "content"
-    ]
-
-    return TestPlan.model_validate_json(
-        content
+    ].get(
+        "content",
+        ""
     )
+
+    if not content:
+
+        raise RuntimeError(
+
+            "Ollama returned an empty response"
+
+        )
+
+    print(
+        "[LLM] Response received"
+    )
+
+    try:
+
+        return TestPlan.model_validate_json(
+            content
+        )
+
+    except Exception as error:
+
+        print(
+            "[LLM] Invalid generated plan:"
+        )
+
+        print(
+            content
+        )
+
+        raise RuntimeError(
+
+            "Failed to parse LLM test plan: "
+            f"{error}"
+
+        )

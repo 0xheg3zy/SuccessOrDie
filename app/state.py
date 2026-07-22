@@ -35,8 +35,6 @@ class StateManager:
         default=None
     ):
 
-        # Dynamic variables have priority
-
         if key in self.dynamic:
 
             return self.dynamic[key]
@@ -90,14 +88,6 @@ class StateManager:
 
         return self.dynamic.copy()
 
-    def __repr__(
-        self
-    ):
-
-        return repr(
-            self.all()
-        )
-
 
 def extract_json_value(
     data,
@@ -128,12 +118,8 @@ def extract_json_value(
 
             try:
 
-                index = int(
-                    key
-                )
-
                 current = current[
-                    index
+                    int(key)
                 ]
 
             except (

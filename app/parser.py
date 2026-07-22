@@ -3,9 +3,7 @@ import json
 from .models import APIRequest
 
 
-def load_json(
-    path: str
-):
+def load_json(path: str):
 
     with open(
         path,
@@ -13,31 +11,21 @@ def load_json(
         encoding="utf-8"
     ) as file:
 
-        return json.load(
-            file
-        )
+        return json.load(file)
 
 
-def load_collection(
-    path: str
-):
+def load_collection(path: str):
 
-    return load_json(
-        path
-    )
+    return load_json(path)
 
 
-def load_environment(
-    path: str | None
-):
+def load_environment(path: str | None):
 
     if not path:
 
         return {}
 
-    environment = load_json(
-        path
-    )
+    environment = load_json(path)
 
     variables = {}
 
@@ -53,13 +41,9 @@ def load_environment(
 
             continue
 
-        key = variable.get(
-            "key"
-        )
+        key = variable.get("key")
 
-        value = variable.get(
-            "value"
-        )
+        value = variable.get("value")
 
         if key:
 
@@ -79,22 +63,20 @@ def extract_collection_variables(
         []
     ):
 
-        if not variable.get(
+        if variable.get(
             "disabled",
             False
         ):
 
-            key = variable.get(
-                "key"
-            )
+            continue
 
-            value = variable.get(
-                "value"
-            )
+        key = variable.get("key")
 
-            if key:
+        value = variable.get("value")
 
-                variables[key] = value
+        if key:
+
+            variables[key] = value
 
     return variables
 
@@ -117,9 +99,7 @@ def extract_request_headers(
 
             continue
 
-        key = header.get(
-            "key"
-        )
+        key = header.get("key")
 
         value = header.get(
             "value",
@@ -131,6 +111,49 @@ def extract_request_headers(
             headers[key] = value
 
     return headers
+
+
+def extract_request_params(
+    request
+):
+
+    params = {}
+
+    url = request.get(
+        "url"
+    )
+
+    if not isinstance(
+        url,
+        dict
+    ):
+
+        return params
+
+    for item in url.get(
+        "query",
+        []
+    ):
+
+        if item.get(
+            "disabled",
+            False
+        ):
+
+            continue
+
+        key = item.get("key")
+
+        value = item.get(
+            "value",
+            ""
+        )
+
+        if key:
+
+            params[key] = value
+
+    return params
 
 
 def extract_request_body(
@@ -161,9 +184,7 @@ def extract_request_body(
 
         try:
 
-            return json.loads(
-                raw
-            )
+            return json.loads(raw)
 
         except json.JSONDecodeError:
 
@@ -185,9 +206,7 @@ def extract_request_body(
 
                 continue
 
-            key = item.get(
-                "key"
-            )
+            key = item.get("key")
 
             value = item.get(
                 "value",
@@ -223,9 +242,7 @@ def extract_request_body(
 
                 continue
 
-            key = item.get(
-                "key"
-            )
+            key = item.get("key")
 
             value = item.get(
                 "value",
@@ -275,9 +292,7 @@ def extract_requests(
 
     requests = []
 
-    def walk_items(
-        items
-    ):
+    def walk_items(items):
 
         for item in items:
 
@@ -317,7 +332,9 @@ def extract_requests(
                     request
                 ),
 
-                params={},
+                params=extract_request_params(
+                    request
+                ),
 
                 body=extract_request_body(
                     request

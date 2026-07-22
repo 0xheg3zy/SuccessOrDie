@@ -1,12 +1,6 @@
-import httpx
+import requests
 
-from .config import (
-    DEFAULT_REQUEST_TIMEOUT
-)
-
-from .models import (
-    TestCase
-)
+from .models import TestCase
 
 from .resolver import (
     resolve_recursive
@@ -18,11 +12,11 @@ from .state import (
 )
 
 
-async def execute_test(
+def execute_test(
     test_case: TestCase,
     state: StateManager,
     proxy: str | None = None,
-    timeout: int = DEFAULT_REQUEST_TIMEOUT,
+    timeout: int = 30,
     verify: bool = True
 ):
 
@@ -48,31 +42,47 @@ async def execute_test(
         state
     )
 
-    client_kwargs = {
-
-        "timeout":
-            timeout,
-
-        "follow_redirects":
-            True,
-
-        "verify":
-            verify
-    }
+    proxies = None
 
     if proxy:
 
-        client_kwargs[
-            "proxy"
-        ] = proxy
+        proxies = {
 
-    async with httpx.AsyncClient(
+            "http":
+                proxy,
 
-        **client_kwargs
+            "https":
+                proxy
 
-    ) as client:
+        }
 
-        response = await client.request(
+    print(
+        "\n[HTTP] Sending request"
+    )
+
+    print(
+        f"[HTTP] Method: "
+        f"{request.method}"
+    )
+
+    print(
+        f"[HTTP] URL: "
+        f"{url}"
+    )
+
+    print(
+        f"[HTTP] Proxy: "
+        f"{proxy or 'None'}"
+    )
+
+    print(
+        f"[HTTP] Verify TLS: "
+        f"{verify}"
+    )
+
+    try:
+
+        response = requests.request(
 
             method=
                 request.method,
@@ -87,8 +97,63 @@ async def execute_test(
                 params,
 
             json=
-                body
+                body,
+
+            proxies=
+                proxies,
+
+            verify=
+                verify,
+
+            timeout=
+                timeout
+
         )
+
+    except requests.Timeout:
+
+        return {
+
+            "test_name":
+                test_case.name,
+
+            "category":
+                test_case.category,
+
+            "description":
+                test_case.description,
+
+            "error":
+                (
+                    f"Request timed out "
+                    f"after {timeout} seconds"
+                ),
+
+            "passed":
+                False
+
+        }
+
+    except requests.RequestException as error:
+
+        return {
+
+            "test_name":
+                test_case.name,
+
+            "category":
+                test_case.category,
+
+            "description":
+                test_case.description,
+
+            "error":
+                str(error),
+
+            "passed":
+                False
+
+        }
 
     try:
 
@@ -96,7 +161,7 @@ async def execute_test(
             response.json()
         )
 
-    except Exception:
+    except ValueError:
 
         response_json = None
 
@@ -113,6 +178,7 @@ async def execute_test(
                 response_json,
 
                 extractor.json_path
+
             )
 
             if value is not None:
@@ -122,6 +188,7 @@ async def execute_test(
                     extractor.name,
 
                     value
+
                 )
 
                 extracted[
@@ -132,8 +199,20 @@ async def execute_test(
 
         response.status_code
 
-        in test_case.expected_status_codes
+        in
 
+        test_case.expected_status_codes
+
+    )
+
+    print(
+        f"[HTTP] Status: "
+        f"{response.status_code}"
+    )
+
+    print(
+        f"[TEST] "
+        f"{'PASS' if passed else 'FAIL'}"
     )
 
     return {
@@ -163,6 +242,7 @@ async def execute_test(
 
             "body":
                 body
+
         },
 
         "response": {
@@ -177,6 +257,7 @@ async def execute_test(
 
             "body":
                 response.text[:5000]
+
         },
 
         "expected_status_codes":
@@ -197,4 +278,5 @@ async def execute_test(
 
         "passed":
             passed
+
     }

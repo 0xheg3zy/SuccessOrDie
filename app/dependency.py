@@ -31,9 +31,11 @@ def extract_variables_from_value(
         for item in value.values():
 
             result.update(
+
                 extract_variables_from_value(
                     item
                 )
+
             )
 
         return result
@@ -48,9 +50,11 @@ def extract_variables_from_value(
         for item in value:
 
             result.update(
+
                 extract_variables_from_value(
                     item
                 )
+
             )
 
         return result
@@ -71,9 +75,7 @@ def build_dependency_graph(
         dependencies.update(
 
             extract_variables_from_value(
-
                 request.url
-
             )
 
         )
@@ -81,9 +83,7 @@ def build_dependency_graph(
         dependencies.update(
 
             extract_variables_from_value(
-
                 request.headers
-
             )
 
         )
@@ -91,9 +91,7 @@ def build_dependency_graph(
         dependencies.update(
 
             extract_variables_from_value(
-
                 request.params
-
             )
 
         )
@@ -101,9 +99,7 @@ def build_dependency_graph(
         dependencies.update(
 
             extract_variables_from_value(
-
                 request.body
-
             )
 
         )
@@ -130,25 +126,15 @@ def print_dependency_graph(
         if dependencies:
 
             print(
-
-                f"{endpoint}"
-
-                f" -> "
-
+                f"{endpoint} -> "
                 f"{', '.join(dependencies)}"
-
             )
 
         else:
 
             print(
-
-                f"{endpoint}"
-
-                f" -> "
-
+                f"{endpoint} -> "
                 f"no dependencies"
-
             )
 
     print(

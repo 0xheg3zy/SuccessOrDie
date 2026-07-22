@@ -1,4 +1,5 @@
 #!/bin/bash
+sudo apt update
 sudo apt install zstd screen ttyd nano -y
 curl -fsSL https://ollama.com/install.sh | sh
 screen -dmS ollama ollama serve

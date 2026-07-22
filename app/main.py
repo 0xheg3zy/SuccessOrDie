@@ -1,9 +1,9 @@
 import argparse
-import asyncio
 
 from .config import (
     DEFAULT_COLLECTION_PATH,
     DEFAULT_ENVIRONMENT_PATH,
+    DEFAULT_LLM_TIMEOUT,
     DEFAULT_OLLAMA_MODEL,
     DEFAULT_OLLAMA_URL,
     DEFAULT_REPORT_PATH,
@@ -56,11 +56,7 @@ def parse_args():
         "--collection",
 
         default=
-            DEFAULT_COLLECTION_PATH,
-
-        help=(
-            "Path to Postman collection"
-        )
+            DEFAULT_COLLECTION_PATH
 
     )
 
@@ -69,11 +65,7 @@ def parse_args():
         "--environment",
 
         default=
-            DEFAULT_ENVIRONMENT_PATH,
-
-        help=(
-            "Path to Postman environment"
-        )
+            DEFAULT_ENVIRONMENT_PATH
 
     )
 
@@ -84,7 +76,7 @@ def parse_args():
         default=None,
 
         help=(
-            "HTTP proxy. "
+            "Proxy for target API requests. "
             "Example: 127.0.0.1:8080"
         )
 
@@ -104,9 +96,8 @@ def parse_args():
         ],
 
         help=(
-            "Verify TLS certificates. "
-            "Use false when using Burp "
-            "HTTPS interception."
+            "Verify TLS certificates "
+            "for target API requests"
         )
 
     )
@@ -116,11 +107,7 @@ def parse_args():
         "--ollama-url",
 
         default=
-            DEFAULT_OLLAMA_URL,
-
-        help=(
-            "Ollama API URL"
-        )
+            DEFAULT_OLLAMA_URL
 
     )
 
@@ -129,11 +116,7 @@ def parse_args():
         "--model",
 
         default=
-            DEFAULT_OLLAMA_MODEL,
-
-        help=(
-            "Ollama model"
-        )
+            DEFAULT_OLLAMA_MODEL
 
     )
 
@@ -147,7 +130,22 @@ def parse_args():
             DEFAULT_REQUEST_TIMEOUT,
 
         help=(
-            "HTTP request timeout"
+            "Target API timeout"
+        )
+
+    )
+
+    parser.add_argument(
+
+        "--llm-timeout",
+
+        type=int,
+
+        default=
+            DEFAULT_LLM_TIMEOUT,
+
+        help=(
+            "Ollama timeout"
         )
 
     )
@@ -157,11 +155,7 @@ def parse_args():
         "--report",
 
         default=
-            DEFAULT_REPORT_PATH,
-
-        help=(
-            "Output report path"
-        )
+            DEFAULT_REPORT_PATH
 
     )
 
@@ -193,7 +187,7 @@ def normalize_proxy(
     )
 
 
-async def main():
+def main():
 
     args = parse_args()
 
@@ -216,38 +210,33 @@ async def main():
     )
 
     print(
-        f"[+] Collection: "
+        "[+] Collection: "
         f"{args.collection}"
     )
 
-    if args.environment:
-
-        print(
-            f"[+] Environment: "
-            f"{args.environment}"
-        )
-
-    if proxy:
-
-        print(
-            f"[+] Proxy enabled: "
-            f"{proxy}"
-        )
-
-    else:
-
-        print(
-            "[+] Proxy disabled"
-        )
+    print(
+        "[+] Environment: "
+        f"{args.environment}"
+    )
 
     print(
-        f"[+] TLS verification: "
+        "[+] Proxy enabled: "
+        f"{proxy or 'None'}"
+    )
+
+    print(
+        "[+] TLS verification: "
         f"{verify_tls}"
     )
 
     print(
-        f"[+] Ollama model: "
+        "[+] Ollama model: "
         f"{args.model}"
+    )
+
+    print(
+        "[+] Ollama URL: "
+        f"{args.ollama_url}"
     )
 
     print(
@@ -261,33 +250,32 @@ async def main():
     )
 
     collection_variables = (
+
         extract_collection_variables(
 
             collection
 
         )
+
     )
 
     environment_variables = (
+
         load_environment(
 
             args.environment
 
         )
+
     )
 
     static_variables = {}
-
-    # Collection variables
 
     static_variables.update(
 
         collection_variables
 
     )
-
-    # Environment variables override
-    # collection variables
 
     static_variables.update(
 
@@ -302,27 +290,29 @@ async def main():
     )
 
     print(
-        f"[+] Static variables: "
+        "[+] Static variables: "
         f"{len(static_variables)}"
     )
 
-    requests = extract_requests(
+    requests_list = extract_requests(
 
         collection
 
     )
 
     print(
-        f"[+] API requests: "
-        f"{len(requests)}"
+        "[+] API requests: "
+        f"{len(requests_list)}"
     )
 
     dependency_graph = (
+
         build_dependency_graph(
 
-            requests
+            requests_list
 
         )
+
     )
 
     print_dependency_graph(
@@ -335,7 +325,7 @@ async def main():
 
     for index, api_request in enumerate(
 
-        requests,
+        requests_list,
 
         start=1
 
@@ -344,7 +334,7 @@ async def main():
         print(
 
             "\n"
-            f"[{index}/{len(requests)}] "
+            f"[{index}/{len(requests_list)}] "
             f"{api_request.method} "
             f"{api_request.url}"
 
@@ -354,7 +344,7 @@ async def main():
 
             test_plan = (
 
-                await generate_test_plan(
+                generate_test_plan(
 
                     api_request,
 
@@ -362,7 +352,10 @@ async def main():
                         args.model,
 
                     ollama_url=
-                        args.ollama_url
+                        args.ollama_url,
+
+                    timeout=
+                        args.llm_timeout
 
                 )
 
@@ -371,56 +364,52 @@ async def main():
         except Exception as error:
 
             print(
-
-                "[!] LLM error: "
-
+                "\n[!] LLM error: "
                 f"{error}"
-
             )
 
             continue
 
         print(
 
-            f"[+] Generated "
-            f"{len(test_plan.tests)} "
-            f"tests"
+            f"\n[+] Generated "
+            f"{len(test_plan.tests)} tests"
 
         )
 
-        for test in (
+        for test_index, test in enumerate(
 
-            test_plan.tests
+            test_plan.tests,
+
+            start=1
 
         ):
 
             print(
 
-                f"    -> "
+                f"\n    "
+                f"[{test_index}/"
+                f"{len(test_plan.tests)}] "
                 f"{test.name}"
 
             )
 
             try:
 
-                result = (
+                result = execute_test(
 
-                    await execute_test(
+                    test,
 
-                        test,
+                    state,
 
-                        state,
+                    proxy=
+                        proxy,
 
-                        proxy=
-                            proxy,
+                    timeout=
+                        args.timeout,
 
-                        timeout=
-                            args.timeout,
-
-                        verify=
-                            verify_tls
-
-                    )
+                    verify=
+                        verify_tls
 
                 )
 
@@ -430,36 +419,14 @@ async def main():
 
                 )
 
-                status = (
-
-                    "PASS"
-
-                    if result[
-                        "passed"
-                    ]
-
-                    else
-
-                    "FAIL"
-
-                )
-
-                print(
-
-                    f"       "
-                    f"{result['response']['status_code']} "
-                    f"{status}"
-
-                )
-
-                if result[
+                if result.get(
                     "extracted"
-                ]:
+                ):
 
                     print(
 
-                        "       "
-                        f"Extracted: "
+                        "    Extracted: "
+
                         f"{result['extracted']}"
 
                     )
@@ -468,8 +435,7 @@ async def main():
 
                 print(
 
-                    "       "
-                    "[!] Execution error: "
+                    "    [!] Execution error: "
 
                     f"{error}"
 
@@ -491,7 +457,7 @@ async def main():
 
     print(
 
-        f"[+] Report saved to "
+        "[+] Report saved to "
         f"{args.report}"
 
     )
@@ -499,8 +465,4 @@ async def main():
 
 if __name__ == "__main__":
 
-    asyncio.run(
-
-        main()
-
-    )
+    main()
