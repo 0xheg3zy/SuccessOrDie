@@ -1,0 +1,1 @@
+make it doesn't close the connection with llm to make llm doesn't take along time to respond
