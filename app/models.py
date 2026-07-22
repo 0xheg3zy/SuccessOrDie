@@ -16,7 +16,7 @@ class TestRequest(BaseModel):
 
     url: str
 
-    headers: dict[str, str] = Field(
+    headers: dict[str, Any] = Field(
         default_factory=dict
     )
 
@@ -40,6 +40,10 @@ class TestCase(BaseModel):
     expected_status_codes: list[int] = Field(
         default_factory=list
     )
+
+    expected_behavior: str = ""
+
+    test_rationale: str = ""
 
     extractors: list[Extractor] = Field(
         default_factory=list
@@ -65,7 +69,7 @@ class APIRequest(BaseModel):
 
     url: str
 
-    headers: dict[str, str] = Field(
+    headers: dict[str, Any] = Field(
         default_factory=dict
     )
 

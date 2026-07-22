@@ -6,9 +6,13 @@ class StateManager:
     ):
 
         self.static = (
+
             static_variables.copy()
+
             if static_variables
+
             else {}
+
         )
 
         self.dynamic = {}
@@ -19,7 +23,9 @@ class StateManager:
         value
     ):
 
-        self.static[key] = value
+        self.static[
+            key
+        ] = value
 
     def set_dynamic(
         self,
@@ -27,7 +33,9 @@ class StateManager:
         value
     ):
 
-        self.dynamic[key] = value
+        self.dynamic[
+            key
+        ] = value
 
     def get(
         self,
@@ -37,11 +45,15 @@ class StateManager:
 
         if key in self.dynamic:
 
-            return self.dynamic[key]
+            return self.dynamic[
+                key
+            ]
 
         if key in self.static:
 
-            return self.static[key]
+            return self.static[
+                key
+            ]
 
         return default
 
@@ -96,7 +108,9 @@ def extract_json_value(
 
     current = data
 
-    for key in path.split("."):
+    for key in path.split(
+        "."
+    ):
 
         if isinstance(
             current,

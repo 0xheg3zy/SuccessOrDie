@@ -67,9 +67,11 @@ def print_summary(
     )
 
     failed = (
+
         total
         -
         passed
+
     )
 
     print(

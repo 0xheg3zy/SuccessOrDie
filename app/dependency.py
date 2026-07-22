@@ -16,9 +16,11 @@ def extract_variables_from_value(
     ):
 
         return set(
+
             VARIABLE_PATTERN.findall(
                 value
             )
+
         )
 
     if isinstance(
@@ -126,15 +128,20 @@ def print_dependency_graph(
         if dependencies:
 
             print(
+
                 f"{endpoint} -> "
+
                 f"{', '.join(dependencies)}"
+
             )
 
         else:
 
             print(
+
                 f"{endpoint} -> "
                 f"no dependencies"
+
             )
 
     print(

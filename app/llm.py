@@ -1,7 +1,8 @@
-from enum import verify
 import json
-import requests
 
+import requests
+import urllib3.exceptions.InsecureRequestWarning
+urllib3.disable_warnings(InsecureRequestWarning)
 from .config import (
     DEFAULT_LLM_TIMEOUT,
     DEFAULT_OLLAMA_MODEL,
@@ -13,51 +14,219 @@ from .models import (
     TestPlan
 )
 
+
 SYSTEM_PROMPT = """
-You are an expert API security tester.
+You are a senior API security engineer,
+penetration tester, and API test designer.
 
-Analyze the supplied API endpoint and
-generate a practical API security test plan.
+Your job is to analyze a Postman API request and
+generate a high-quality API security and functional
+test plan.
 
-Focus on:
+Do not generate only happy-path tests.
 
-1. Functional testing
-2. Missing parameters
-3. Invalid parameters
-4. Boundary testing
-5. Authentication
-6. Authorization
-7. BOLA / IDOR
-8. Rate limiting
-9. Information disclosure
-10. HTTP method validation
+You must reason about the endpoint, its parameters,
+headers, body, authentication, authorization,
+business logic, and variables.
+
+==================================================
+VARIABLE RESOLUTION
+==================================================
+
+The request may contain Postman variables such as:
+
+{{base_url}}
+{{access_token}}
+{{user_id}}
+{{address_id}}
+
+Variables can have two sources:
+
+1. Static variables
+2. Dynamic variables extracted from previous
+   API responses
+
+The supplied context contains:
+
+- static_variables
+- currently_available_dynamic_variables
+- endpoint dependencies
 
 Rules:
 
-- Return ONLY valid JSON.
-- Do not return markdown.
-- Do not invent tokens.
-- Use the supplied endpoint.
-- Keep tests practical.
-- Every test must have expected_status_codes.
-- Preserve the original request structure.
-- Do not remove required headers unless the test
-  specifically targets missing headers.
+- Never invent a dynamic variable value.
+- Never replace a dynamic variable with a fake value.
+- If a variable already exists in the available state,
+  preserve it.
+- If a variable is required by this endpoint but is not
+  currently available, keep the variable placeholder.
+- The executor will resolve variables before execution.
+- If the endpoint can create a value required by later
+  endpoints, create an extractor.
 
-If a successful response contains useful
-runtime values, create extractors.
+Example:
 
-Useful runtime values:
+Login response:
 
-- token
-- access_token
-- refresh_token
-- id
-- user_id
-- order_id
-- session_id
+{
+  "data": {
+    "access_token": "..."
+  }
+}
 
-Expected JSON:
+Create:
+
+{
+  "name": "access_token",
+  "json_path": "data.access_token"
+}
+
+Later request:
+
+Authorization: Bearer {{access_token}}
+
+The variable must remain exactly:
+
+{{access_token}}
+
+==================================================
+TEST DESIGN
+==================================================
+
+Generate meaningful tests covering relevant scenarios.
+
+Consider:
+
+1. Happy Path
+2. Missing required fields
+3. Empty values
+4. Null values
+5. Invalid data types
+6. Invalid formats
+7. Boundary values
+8. Minimum length
+9. Maximum length
+10. Below minimum
+11. Above maximum
+12. Very long input
+13. Special characters
+14. Unicode
+15. Whitespace
+16. Duplicate data
+17. Invalid authentication
+18. Missing authentication
+19. Expired authentication
+20. Authorization
+21. BOLA / IDOR
+22. Horizontal privilege escalation
+23. Vertical privilege escalation
+24. HTTP method validation
+25. Content-Type validation
+26. Unexpected parameters
+27. Mass assignment
+28. Rate limiting
+29. Sensitive data exposure
+30. Error handling
+31. Information disclosure
+32. Business logic issues
+
+Only generate tests relevant to the endpoint.
+
+Avoid duplicate or meaningless tests.
+
+==================================================
+EDGE CASES
+==================================================
+
+Analyze every input field.
+
+For strings:
+
+- empty
+- whitespace
+- minimum
+- maximum
+- below minimum
+- above maximum
+- very long
+- Unicode
+- special characters
+
+For numbers:
+
+- zero
+- negative
+- minimum
+- maximum
+- decimal
+- huge number
+- numeric string
+- non-numeric
+
+For arrays:
+
+- empty
+- one item
+- many items
+- duplicate items
+- invalid item types
+- null items
+
+For objects:
+
+- empty object
+- missing fields
+- unexpected fields
+- nested unexpected fields
+
+==================================================
+EXPECTED BEHAVIOR
+==================================================
+
+Every test MUST contain:
+
+- expected_status_codes
+- expected_behavior
+- test_rationale
+
+Expected behavior describes what SHOULD happen.
+
+Do NOT invent actual results.
+
+The executor will add:
+
+- actual_status_code
+- actual_response
+- passed
+- result_reason
+
+==================================================
+TEST RESULT SEMANTICS
+==================================================
+
+A test is successful when the actual behavior matches
+the expected behavior.
+
+Do not assume that HTTP 2xx always means success.
+
+For example:
+
+A "missing required field" test returning 400
+may be a PASS.
+
+A "successful registration" test returning 400
+may be a FAIL.
+
+An authorization test returning 200 with another user's
+data is a security FAIL.
+
+==================================================
+OUTPUT
+==================================================
+
+Return ONLY valid JSON.
+
+Expected structure:
 
 {
   "endpoint": "string",
@@ -67,6 +236,7 @@ Expected JSON:
       "name": "string",
       "category": "string",
       "description": "string",
+
       "request": {
         "method": "string",
         "url": "string",
@@ -74,11 +244,17 @@ Expected JSON:
         "params": {},
         "body": null
       },
+
       "expected_status_codes": [200],
+
+      "expected_behavior": "What should happen.",
+
+      "test_rationale": "Why this test exists.",
+
       "extractors": [
         {
-          "name": "token",
-          "json_path": "data.token"
+          "name": "access_token",
+          "json_path": "data.access_token"
         }
       ]
     }
@@ -87,58 +263,200 @@ Expected JSON:
 """
 
 
-def generate_test_plan(
-    api_request: APIRequest,
-    model: str = DEFAULT_OLLAMA_MODEL,
-    ollama_url: str = DEFAULT_OLLAMA_URL,
-    timeout: int = DEFAULT_LLM_TIMEOUT,
-    proxy: str | None = None,
-    verify: bool = True
-):
+ANALYZER_PROMPT = """
+You are analyzing the result of an API test.
 
-    if proxy:
-        proxies = {
-            "http":
-                proxy,
-            "https":
-                proxy
-        }
-    else:
-        proxies = None
+Compare:
 
-    request_data = (
-        api_request.model_dump()
-    )
+1. Test description
+2. Test rationale
+3. Expected behavior
+4. Expected status codes
+5. Actual HTTP status
+6. Actual response
 
-    prompt = f"""
-Analyze this API endpoint.
+Determine:
 
-Original API request:
+- PASS or FAIL
+- Actual behavior
+- Clear reason
+- Security impact
+- Severity
 
-{json.dumps(
-    request_data,
-    indent=2,
-    ensure_ascii=False
-)}
+Important:
 
-Generate a practical API security
-test plan based on this request.
+Do not mark a test as failed only because the status
+code differs.
 
-Preserve the original request structure.
+Determine whether the API behavior actually violates
+the expected behavior.
 
-If this is an authentication endpoint
-and the response may contain a token,
-add an extractor.
+Examples:
 
-Return ONLY valid JSON.
+Missing required field + HTTP 400:
+PASS if rejection was expected.
+
+Successful registration + HTTP 400:
+FAIL if the API should accept valid input.
+
+Unauthorized access + HTTP 200 + sensitive data:
+FAIL with security impact.
+
+Return ONLY valid JSON:
+
+{
+  "passed": true,
+  "actual_behavior": "What actually happened.",
+  "reason": "Why the test passed or failed.",
+  "security_impact": "None or explain the impact.",
+  "severity": "info|low|medium|high|critical"
+}
 """
+
+
+def ollama_chat(
+    messages,
+    model,
+    ollama_url,
+    timeout,
+    proxies=None,
+    verify=True
+):
 
     payload = {
 
         "model":
             model,
 
-        "messages": [
+        "messages":
+            messages,
+
+        "stream":
+            False,
+
+        "format":
+            "json"
+
+    }
+
+    response = requests.post(
+
+        ollama_url,
+
+        json=payload,
+
+        timeout=timeout,
+        proxies=proxies,
+        verify=verify
+
+    )
+
+    response.raise_for_status()
+
+    data = response.json()
+
+    content = data.get(
+        "message",
+        {}
+    ).get(
+        "content",
+        ""
+    )
+
+    if not content:
+
+        raise RuntimeError(
+
+            "Ollama returned empty content"
+
+        )
+
+    return content
+
+
+def generate_test_plan(
+    api_request: APIRequest,
+    static_variables=None,
+    dynamic_variables=None,
+    dependencies=None,
+    model=DEFAULT_OLLAMA_MODEL,
+    ollama_url=DEFAULT_OLLAMA_URL,
+    timeout=DEFAULT_LLM_TIMEOUT,
+    proxy=None,
+    verify=True
+):
+
+    if proxy:
+
+        proxies = {
+
+            "http":
+                proxy,
+
+            "https":
+                proxy
+
+        }
+
+    else:
+
+        proxies = None
+
+    if verify:
+
+        verify = True
+
+    else:
+
+        verify = False
+
+    context = {
+
+        "request":
+            api_request.model_dump(),
+
+        "static_variables":
+            static_variables or {},
+
+        "currently_available_dynamic_variables":
+            dynamic_variables or {},
+
+        "endpoint_dependencies":
+            dependencies or []
+
+    }
+
+    prompt = f"""
+Analyze the following Postman API endpoint.
+
+Context:
+
+{json.dumps(
+    context,
+    indent=2,
+    ensure_ascii=False
+)}
+
+Generate a comprehensive API test plan.
+
+Important:
+
+- Preserve Postman variables.
+- Use available dynamic variables.
+- Do not invent dynamic values.
+- Generate meaningful edge cases.
+- Generate expected behavior.
+- Generate test rationale.
+- Create extractors for useful response values.
+"""
+
+    print(
+        "[LLM] Generating test plan..."
+    )
+
+    content = ollama_chat(
+
+        messages=[
 
             {
                 "role":
@@ -158,125 +476,146 @@ Return ONLY valid JSON.
 
         ],
 
-        "stream":
-            False,
+        model=
+            model,
 
-        "format":
-            "json"
-    }
-
-    print(
-        "[LLM] URL: "
-        f"{ollama_url}"
-    )
-
-    print(
-        "[LLM] Model: "
-        f"{model}"
-    )
-
-    print(
-        "[LLM] Sending request..."
-    )
-
-    try:
-
-        response = requests.post(
-
+        ollama_url=
             ollama_url,
 
-            json=payload,
+        timeout=
+            timeout,
 
-            timeout=timeout,
-            verify=verify,
-            proxies=proxies
+        proxies=
+            proxies,
 
-        )
+        verify=
+            verify
 
-        print(
-            "[LLM] HTTP status: "
-            f"{response.status_code}"
-        )
-
-        response.raise_for_status()
-
-    except requests.Timeout:
-
-        raise RuntimeError(
-
-            "Ollama request timed out "
-            f"after {timeout} seconds"
-
-        )
-
-    except requests.RequestException as error:
-
-        raise RuntimeError(
-
-            f"Ollama request failed: "
-            f"{error}"
-
-        )
-
-    try:
-
-        data = response.json()
-
-    except ValueError:
-
-        raise RuntimeError(
-
-            "Ollama returned invalid JSON"
-
-        )
-
-    if "message" not in data:
-
-        raise RuntimeError(
-
-            "Ollama response does not "
-            "contain 'message'"
-
-        )
-
-    content = data[
-        "message"
-    ].get(
-        "content",
-        ""
     )
 
-    if not content:
-
-        raise RuntimeError(
-
-            "Ollama returned an empty response"
-
-        )
-
-    print(
-        "[LLM] Response received"
+    return TestPlan.model_validate_json(
+        content
     )
 
-    try:
 
-        return TestPlan.model_validate_json(
-            content
-        )
+def analyze_test_result(
+    test_case,
+    actual_status_code,
+    actual_response,
+    model=DEFAULT_OLLAMA_MODEL,
+    ollama_url=DEFAULT_OLLAMA_URL,
+    timeout=DEFAULT_LLM_TIMEOUT,
+    proxies=None,
+    verify=True
+):
 
-    except Exception as error:
+    if proxy:
 
-        print(
-            "[LLM] Invalid generated plan:"
-        )
+        proxies = {
 
-        print(
-            content
-        )
+            "http":
+                proxy,
 
-        raise RuntimeError(
+            "https":
+                proxy
 
-            "Failed to parse LLM test plan: "
-            f"{error}"
+        }
 
-        )
+    else:
+
+        proxies = None
+
+    if verify:
+
+        verify = True
+
+    else:
+
+        verify = False
+
+    context = {
+
+        "test_name":
+            test_case.name,
+
+        "category":
+            test_case.category,
+
+        "description":
+            test_case.description,
+
+        "test_rationale":
+            test_case.test_rationale,
+
+        "expected_status_codes":
+            test_case.expected_status_codes,
+
+        "expected_behavior":
+            test_case.expected_behavior,
+
+        "actual_status_code":
+            actual_status_code,
+
+        "actual_response":
+            actual_response
+
+    }
+
+    prompt = f"""
+Analyze this API test result.
+
+{json.dumps(
+    context,
+    indent=2,
+    ensure_ascii=False
+)}
+
+Determine whether the test passed or failed.
+
+Explain exactly why.
+
+Return ONLY valid JSON.
+"""
+
+    content = ollama_chat(
+
+        messages=[
+
+            {
+                "role":
+                    "system",
+
+                "content":
+                    ANALYZER_PROMPT
+            },
+
+            {
+                "role":
+                    "user",
+
+                "content":
+                    prompt
+            }
+
+        ],
+
+        model=
+            model,
+
+        ollama_url=
+            ollama_url,
+
+        timeout=
+            timeout,
+
+        proxies=
+            proxies,
+
+        verify=
+            verify
+
+    )
+
+    return json.loads(
+        content
+    )

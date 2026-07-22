@@ -1,9 +1,9 @@
 import requests
-
-from .models import TestCase
-
+import urllib3.exceptions.InsecureRequestWarning
+urllib3.disable_warnings(InsecureRequestWarning)
 from .resolver import (
-    resolve_recursive
+    resolve_request,
+    unresolved_variables
 )
 
 from .state import (
@@ -13,34 +13,96 @@ from .state import (
 
 
 def execute_test(
-    test_case: TestCase,
+    test_case,
     state: StateManager,
-    proxy: str | None = None,
-    timeout: int = 30,
-    verify: bool = True
+    proxy=None,
+    timeout=30,
+    verify=True
 ):
 
-    request = test_case.request
+    resolved_request = resolve_request(
 
-    url = resolve_recursive(
-        request.url,
+        test_case.request,
+
         state
+
     )
 
-    headers = resolve_recursive(
-        request.headers,
-        state
+    unresolved = []
+
+    unresolved.extend(
+
+        unresolved_variables(
+
+            resolved_request[
+                "url"
+            ],
+
+            state
+
+        )
+
     )
 
-    params = resolve_recursive(
-        request.params,
-        state
+    unresolved.extend(
+
+        unresolved_variables(
+
+            resolved_request[
+                "headers"
+            ],
+
+            state
+
+        )
+
     )
 
-    body = resolve_recursive(
-        request.body,
-        state
+    unresolved.extend(
+
+        unresolved_variables(
+
+            resolved_request[
+                "params"
+            ],
+
+            state
+
+        )
+
     )
+
+    unresolved.extend(
+
+        unresolved_variables(
+
+            resolved_request[
+                "body"
+            ],
+
+            state
+
+        )
+
+    )
+
+    if unresolved:
+
+        return {
+
+            "test_name":
+                test_case.name,
+
+            "passed":
+                False,
+
+            "error":
+                "Unresolved variables",
+
+            "unresolved_variables":
+                unresolved
+
+        }
 
     proxies = None
 
@@ -61,23 +123,18 @@ def execute_test(
     )
 
     print(
-        f"[HTTP] Method: "
-        f"{request.method}"
+
+        "[HTTP] "
+        f"{resolved_request['method']} "
+        f"{resolved_request['url']}"
+
     )
 
     print(
-        f"[HTTP] URL: "
-        f"{url}"
-    )
 
-    print(
-        f"[HTTP] Proxy: "
+        "[HTTP] Proxy: "
         f"{proxy or 'None'}"
-    )
 
-    print(
-        f"[HTTP] Verify TLS: "
-        f"{verify}"
     )
 
     try:
@@ -85,19 +142,29 @@ def execute_test(
         response = requests.request(
 
             method=
-                request.method,
+                resolved_request[
+                    "method"
+                ],
 
             url=
-                url,
+                resolved_request[
+                    "url"
+                ],
 
             headers=
-                headers,
+                resolved_request[
+                    "headers"
+                ],
 
             params=
-                params,
+                resolved_request[
+                    "params"
+                ],
 
             json=
-                body,
+                resolved_request[
+                    "body"
+                ],
 
             proxies=
                 proxies,
@@ -110,30 +177,6 @@ def execute_test(
 
         )
 
-    except requests.Timeout:
-
-        return {
-
-            "test_name":
-                test_case.name,
-
-            "category":
-                test_case.category,
-
-            "description":
-                test_case.description,
-
-            "error":
-                (
-                    f"Request timed out "
-                    f"after {timeout} seconds"
-                ),
-
-            "passed":
-                False
-
-        }
-
     except requests.RequestException as error:
 
         return {
@@ -144,22 +187,37 @@ def execute_test(
             "category":
                 test_case.category,
 
-            "description":
-                test_case.description,
+            "expected": {
 
-            "error":
-                str(error),
+                "status_codes":
+                    test_case.expected_status_codes,
+
+                "behavior":
+                    test_case.expected_behavior
+
+            },
+
+            "actual": {
+
+                "error":
+                    str(error)
+
+            },
 
             "passed":
-                False
+                False,
+
+            "reason":
+                (
+                    "Request execution failed: "
+                    f"{error}"
+                )
 
         }
 
     try:
 
-        response_json = (
-            response.json()
-        )
+        response_json = response.json()
 
     except ValueError:
 
@@ -167,7 +225,7 @@ def execute_test(
 
     extracted = {}
 
-    if response_json:
+    if response_json is not None:
 
         for extractor in (
             test_case.extractors
@@ -195,25 +253,13 @@ def execute_test(
                     extractor.name
                 ] = value
 
-    passed = (
+                print(
 
-        response.status_code
+                    "[+] Dynamic variable "
+                    f"resolved: "
+                    f"{extractor.name}"
 
-        in
-
-        test_case.expected_status_codes
-
-    )
-
-    print(
-        f"[HTTP] Status: "
-        f"{response.status_code}"
-    )
-
-    print(
-        f"[TEST] "
-        f"{'PASS' if passed else 'FAIL'}"
-    )
+                )
 
     return {
 
@@ -226,57 +272,61 @@ def execute_test(
         "description":
             test_case.description,
 
+        "test_rationale":
+            test_case.test_rationale,
+
         "request": {
 
             "method":
-                request.method,
+                resolved_request[
+                    "method"
+                ],
 
             "url":
-                url,
+                resolved_request[
+                    "url"
+                ],
 
             "headers":
-                headers,
+                resolved_request[
+                    "headers"
+                ],
 
             "params":
-                params,
+                resolved_request[
+                    "params"
+                ],
 
             "body":
-                body
+                resolved_request[
+                    "body"
+                ]
 
         },
 
-        "response": {
+        "expected": {
+
+            "status_codes":
+                test_case.expected_status_codes,
+
+            "behavior":
+                test_case.expected_behavior
+
+        },
+
+        "actual": {
 
             "status_code":
                 response.status_code,
 
-            "headers":
-                dict(
-                    response.headers
-                ),
-
-            "body":
-                response.text[:5000]
+            "response":
+                response.text[
+                    :5000
+                ]
 
         },
-
-        "expected_status_codes":
-            test_case.expected_status_codes,
 
         "extracted":
-            extracted,
-
-        "state": {
-
-            "static":
-                state.static_values(),
-
-            "dynamic":
-                state.dynamic_values()
-
-        },
-
-        "passed":
-            passed
+            extracted
 
     }

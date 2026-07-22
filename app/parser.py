@@ -41,9 +41,13 @@ def load_environment(path: str | None):
 
             continue
 
-        key = variable.get("key")
+        key = variable.get(
+            "key"
+        )
 
-        value = variable.get("value")
+        value = variable.get(
+            "value"
+        )
 
         if key:
 
@@ -70,9 +74,13 @@ def extract_collection_variables(
 
             continue
 
-        key = variable.get("key")
+        key = variable.get(
+            "key"
+        )
 
-        value = variable.get("value")
+        value = variable.get(
+            "value"
+        )
 
         if key:
 
@@ -99,7 +107,9 @@ def extract_request_headers(
 
             continue
 
-        key = header.get("key")
+        key = header.get(
+            "key"
+        )
 
         value = header.get(
             "value",
@@ -142,7 +152,9 @@ def extract_request_params(
 
             continue
 
-        key = item.get("key")
+        key = item.get(
+            "key"
+        )
 
         value = item.get(
             "value",
@@ -184,7 +196,9 @@ def extract_request_body(
 
         try:
 
-            return json.loads(raw)
+            return json.loads(
+                raw
+            )
 
         except json.JSONDecodeError:
 
@@ -206,7 +220,9 @@ def extract_request_body(
 
                 continue
 
-            key = item.get("key")
+            key = item.get(
+                "key"
+            )
 
             value = item.get(
                 "value",
@@ -242,7 +258,9 @@ def extract_request_body(
 
                 continue
 
-            key = item.get("key")
+            key = item.get(
+                "key"
+            )
 
             value = item.get(
                 "value",
@@ -292,14 +310,18 @@ def extract_requests(
 
     requests = []
 
-    def walk_items(items):
+    def walk_items(
+        items
+    ):
 
         for item in items:
 
             if "item" in item:
 
                 walk_items(
-                    item["item"]
+                    item[
+                        "item"
+                    ]
                 )
 
                 continue
@@ -339,6 +361,7 @@ def extract_requests(
                 body=extract_request_body(
                     request
                 )
+
             )
 
             requests.append(

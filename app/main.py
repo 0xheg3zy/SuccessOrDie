@@ -20,6 +20,7 @@ from .executor import (
 )
 
 from .llm import (
+    analyze_test_result,
     generate_test_plan
 )
 
@@ -40,15 +41,12 @@ from .state import (
 )
 
 
-proxy_copy = None
 def parse_args():
 
     parser = argparse.ArgumentParser(
 
-        description=(
-            "AI-powered API testing tool "
-            "for Postman collections"
-        )
+        description=
+            "AI API Testing Tool"
 
     )
 
@@ -74,12 +72,7 @@ def parse_args():
 
         "--proxy",
 
-        default=None,
-
-        help=(
-            "Proxy for target API requests. "
-            "Example: 127.0.0.1:8080"
-        )
+        default=None
 
     )
 
@@ -94,12 +87,7 @@ def parse_args():
         choices=[
             "true",
             "false"
-        ],
-
-        help=(
-            "Verify TLS certificates "
-            "for target API requests"
-        )
+        ]
 
     )
 
@@ -128,11 +116,7 @@ def parse_args():
         type=int,
 
         default=
-            DEFAULT_REQUEST_TIMEOUT,
-
-        help=(
-            "Target API timeout"
-        )
+            DEFAULT_REQUEST_TIMEOUT
 
     )
 
@@ -143,11 +127,7 @@ def parse_args():
         type=int,
 
         default=
-            DEFAULT_LLM_TIMEOUT,
-
-        help=(
-            "Ollama timeout"
-        )
+            DEFAULT_LLM_TIMEOUT
 
     )
 
@@ -164,7 +144,7 @@ def parse_args():
 
 
 def normalize_proxy(
-    proxy: str | None
+    proxy
 ):
 
     if not proxy:
@@ -184,7 +164,8 @@ def normalize_proxy(
         return proxy
 
     return (
-        f"http://{proxy}"
+        "http://"
+        + proxy
     )
 
 
@@ -199,9 +180,7 @@ def main():
     verify_tls = (
 
         args.verify.lower()
-
         ==
-
         "true"
 
     )
@@ -211,37 +190,38 @@ def main():
     )
 
     print(
+
         "[+] Collection: "
         f"{args.collection}"
+
     )
 
     print(
+
         "[+] Environment: "
         f"{args.environment}"
+
     )
 
     print(
-        "[+] Proxy enabled: "
-        f"{proxy or 'None'}"
+
+        "[+] Proxy: "
+        f"{proxy or 'Disabled'}"
+
     )
 
     print(
+
         "[+] TLS verification: "
         f"{verify_tls}"
+
     )
 
     print(
+
         "[+] Ollama model: "
         f"{args.model}"
-    )
 
-    print(
-        "[+] Ollama URL: "
-        f"{args.ollama_url}"
-    )
-
-    print(
-        "\n[+] Loading collection..."
     )
 
     collection = load_collection(
@@ -291,8 +271,10 @@ def main():
     )
 
     print(
+
         "[+] Static variables: "
         f"{len(static_variables)}"
+
     )
 
     requests_list = extract_requests(
@@ -302,8 +284,10 @@ def main():
     )
 
     print(
+
         "[+] API requests: "
         f"{len(requests_list)}"
+
     )
 
     dependency_graph = (
@@ -341,6 +325,18 @@ def main():
 
         )
 
+        dependencies = (
+
+            dependency_graph.get(
+
+                api_request.name,
+
+                []
+
+            )
+
+        )
+
         try:
 
             test_plan = (
@@ -349,6 +345,15 @@ def main():
 
                     api_request,
 
+                    static_variables=
+                        state.static_values(),
+
+                    dynamic_variables=
+                        state.dynamic_values(),
+
+                    dependencies=
+                        dependencies,
+
                     model=
                         args.model,
 
@@ -356,13 +361,7 @@ def main():
                         args.ollama_url,
 
                     timeout=
-                        args.llm_timeout,
-
-                    proxy=
-                        proxy,
-                        
-                    verify=
-                        verify_tls
+                        args.llm_timeout
 
                 )
 
@@ -371,20 +370,23 @@ def main():
         except Exception as error:
 
             print(
-                "\n[!] LLM error: "
+
+                "[!] LLM error: "
                 f"{error}"
+
             )
 
             continue
 
         print(
 
-            f"\n[+] Generated "
-            f"{len(test_plan.tests)} tests"
+            "[+] Generated "
+            f"{len(test_plan.tests)} "
+            "tests"
 
         )
 
-        for test_index, test in enumerate(
+        for test_index, test_case in enumerate(
 
             test_plan.tests,
 
@@ -394,31 +396,31 @@ def main():
 
             print(
 
-                f"\n    "
-                f"[{test_index}/"
+                "\n"
+                f"    [{test_index}/"
                 f"{len(test_plan.tests)}] "
-                f"{test.name}"
+                f"{test_case.name}"
 
             )
 
-            try:
-                proxy_copy = proxy
-                result = execute_test(
+            result = execute_test(
 
-                    test,
+                test_case,
 
-                    state,
+                state,
 
-                    proxy=
-                        proxy,
+                proxy=
+                    proxy,
 
-                    timeout=
-                        args.timeout,
+                timeout=
+                    args.timeout,
 
-                    verify=
-                        verify_tls
+                verify=
+                    verify_tls
 
-                )
+            )
+
+            if "actual" not in result:
 
                 results.append(
 
@@ -426,27 +428,79 @@ def main():
 
                 )
 
-                if result.get(
-                    "extracted"
-                ):
+                continue
 
-                    print(
+            print(
 
-                        "    Extracted: "
+                "    [AI] Analyzing result..."
+            )
 
-                        f"{result['extracted']}"
+            try:
+
+                analysis = (
+
+                    analyze_test_result(
+
+                        test_case,
+
+                        result[
+                            "actual"
+                        ].get(
+                            "status_code"
+                        ),
+
+                        result[
+                            "actual"
+                        ].get(
+                            "response"
+                        ),
+
+                        model=
+                            args.model,
+
+                        ollama_url=
+                            args.ollama_url,
+
+                        timeout=
+                            args.llm_timeout,
+
+                        proxies=
+                            proxy,
+
+                        verify=
+                            verify_tls
 
                     )
 
+                )
+
+                result.update(
+
+                    analysis
+
+                )
+
             except Exception as error:
 
-                print(
+                result[
+                    "passed"
+                ] = False
 
-                    "    [!] Execution error: "
+                result[
+                    "reason"
+                ] = (
+
+                    "AI result analysis failed: "
 
                     f"{error}"
 
                 )
+
+            results.append(
+
+                result
+
+            )
 
     save_report(
 
@@ -464,7 +518,7 @@ def main():
 
     print(
 
-        "[+] Report saved to "
+        "[+] Report saved: "
         f"{args.report}"
 
     )
