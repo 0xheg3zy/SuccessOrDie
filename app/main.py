@@ -356,7 +356,13 @@ def main():
                         args.ollama_url,
 
                     timeout=
-                        args.llm_timeout
+                        args.llm_timeout,
+
+                    proxy=
+                        proxy,
+                        
+                    verify=
+                        verify_tls
 
                 )
 

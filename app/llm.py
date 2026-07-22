@@ -1,8 +1,7 @@
 from enum import verify
 import json
-
 import requests
-from .main import proxy_copy
+
 from .config import (
     DEFAULT_LLM_TIMEOUT,
     DEFAULT_OLLAMA_MODEL,
