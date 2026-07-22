@@ -1,6 +1,6 @@
 import requests
-import urllib3.exceptions.InsecureRequestWarning
-urllib3.disable_warnings(InsecureRequestWarning)
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from .resolver import (
     resolve_request,
     unresolved_variables

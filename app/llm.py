@@ -1,8 +1,8 @@
 import json
 
 import requests
-import urllib3.exceptions.InsecureRequestWarning
-urllib3.disable_warnings(InsecureRequestWarning)
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from .config import (
     DEFAULT_LLM_TIMEOUT,
     DEFAULT_OLLAMA_MODEL,
