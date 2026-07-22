@@ -40,6 +40,7 @@ from .state import (
 )
 
 
+proxy_copy = None
 def parse_args():
 
     parser = argparse.ArgumentParser(
@@ -395,7 +396,7 @@ def main():
             )
 
             try:
-
+                proxy_copy = proxy
                 result = execute_test(
 
                     test,

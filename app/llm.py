@@ -2,7 +2,7 @@ from enum import verify
 import json
 
 import requests
-
+from .main import proxy_copy
 from .config import (
     DEFAULT_LLM_TIMEOUT,
     DEFAULT_OLLAMA_MODEL,
@@ -13,7 +13,13 @@ from .models import (
     APIRequest,
     TestPlan
 )
-
+if proxy_copy:
+    proxies = {
+        "http": proxy_copy,
+        "https": proxy_copy
+    }
+else:
+    proxies = None
 
 SYSTEM_PROMPT = """
 You are an expert API security tester.
